@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Painting the Data Picture with D3.js</title>
+
+    <link rel="stylesheet" href="css/reveal.css">
+    <link rel="stylesheet" href="css/theme/night.css">
+
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css">
+
+    <!-- Theme used for syntax highlighting of code -->
+    <link rel="stylesheet" href="lib/css/zenburn.css">
+
+    <!-- Printing and PDF exports -->
+    <script>
+      var link = document.createElement( 'link' );
+      link.rel = 'stylesheet';
+      link.type = 'text/css';
+      link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+      document.getElementsByTagName( 'head' )[0].appendChild( link );
+    </script>
+
+    <style>
+      .reveal pre code {
+        font-family: 'Fira Code', monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section>
+          <h2>Painting the Data Picture<br>with D3.js</h2>
+          <h4>Emily Aviva Kapor-Mater</h4>
+          <p style="font-size: 80%;">
+            <a href="http://emilyaviva.com/">emilyaviva.com</a>
+            <br>
+            <i class="fa fa-twitter-square" aria-hidden="true"></i>
+            <a href="https://twitter.com/EmilyAviva">twitter.com/EmilyAviva</a>
+            <br>
+            <i class="fa fa-github" aria-hidden="true"></i>
+            <a href="https://github.com/EmilyAviva">github.com/EmilyAviva</a>
+            <br>
+            <i class="fa fa-linkedin-square" aria-hidden="true"></i>
+            <a href="https://linkedin.com/in/emilykapor">linkedin.com/in/emilykapor</a>
+          </p>
+        </section>
+        <section>
+          <h2>What is D3?</h2>
+          <table>
+            <tr>
+              <td><em>Data</em></td>
+              <td>Serialized (JSON, CSV, etc.)</td>
+            </tr>
+            <tr>
+              <td><em>Driven</em></td>
+              <td><i class="fa fa-arrow-down" aria-hidden="true"></i></td>
+            </tr>
+            <tr>
+              <td><em>Documents</em></td>
+              <td>
+                Output
+                <br>
+                <ul>
+                  <li>HTML, CSS, SVG</li>
+                  <li>…but not just web!</li>
+                </ul>
+              </td>
+            </tr>
+          </table>
+        </section>
+
+        <!-- BEGIN VORONOI ARC MAP -->
+        <section>
+          <section>
+            <h2>A complex visualization:<br>Voronoi Arc Map</h2>
+            <p style="font-size:80%;">The partitioning of a plane with <em>n</em> points into convex polygons such that each polygon contains exactly one generating point and every point in a given polygon is closer to its generating point than to any other.</em></p>
+            <p style="font-size:14px;"><a href="http://mathworld.wolfram.com/VoronoiDiagram.html">Wolfram MathWorld</a></p>
+            <p>This section is based on Mike Bostock's excellent <a href="http://bl.ocks.org/mbostock/7608400">Voronoi arc map</a>, showing commercial airline flights between cities (GPL v3)</p>
+          </section>
+          <section>
+            <h2>Include some extra libraries</h2>
+            <pre><code class="html">
+  &lt;!DOCTYPE html&gt;
+  &lt;html lang="en"&gt;
+    &lt;head&gt;
+      &lt;meta charset="utf-8"&gt;
+      &lt;title&gt;Voronoi Arc Map&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+      &lt;div id="chart"&gt;&lt;/div&gt;
+      &lt;script src="//path/to/d3.js"&gt;&lt;/script&gt;
+      &lt;script src="//path/to/d3/queue.js"&gt;&lt;/script&gt;
+      &lt;script src="//path/to/mbostock/topojson.js"&gt;&lt;/script&gt;
+      &lt;script src="client.js"&gt;&lt;/script&gt;
+    &lt;/body&gt;
+  &lt;/html&gt;</code></pre>
+          </section>
+          <section>
+            <h2>Set up D3</h2>
+            <pre><code class="javascript">var width = 960
+var height = 500
+
+var projection = d3.geo.albers()
+  .translate([width / 2, height / 2])
+  .scale(1080)
+
+var path = d3.geo.path()
+  .projection(projection)
+
+var voronoi = d3.geom.voronoi()
+  .x((d) => d.x)
+  .y((d) => d.y)
+  .clipExtent([[0, 0], [width, height]])
+
+var svg = d3
+  .select('#chart')
+  .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+  </code></pre>
+          </section>
+          <section>
+            <h2>Asynchronously load data until ready</h2>
+            <pre><code class="javascript">queue()
+  .defer(d3.json, 'us.json')
+  .defer(d3.csv, 'airports.csv')
+  .defer(d3.csv, 'flights.csv')
+  .await(ready)</code></pre>
+          </section>
+          <section>
+            <h4>When ready, start calculating what to draw</h4>
+            <pre><code class="javascript">function ready(error, us, airports, flights) {
+  if (error) throw error;
+
+  var airportById = d3.map()
+
+  airports.forEach((d) => {
+    airportById.set(d.iata, d)
+    d.outgoing = []
+    d.incoming = []
+  })
+
+  flights.forEach((flight) => {
+    var source = airportById.get(flight.origin)
+    var target = airportById.get(flight.destination)
+    var link = {source, target}
+    source.outgoing.push(link)
+    target.incoming.push(link)
+  })
+}</code></pre>
+          </section>
+          <section>
+            <pre><code class="javascript">airports = airports.filter((d) => {
+  if (d.count = Math.max(d.incoming.length, d.outgoing.length)) {
+    d[0] = +d.longitude
+    d[1] = +d.latitude
+    var position = projection(d)
+    d.x = position[0]
+    d.y = position[1]
+    return true
+  }
+})
+
+voronoi(airports).forEach((d) => {
+  d.point.cell = d
+})
+
+svg.append('path')
+  .datum(topojson.feature(us, us.objects.land))
+  .attr('class', 'states')
+  .attr('d', path)
+
+svg.append('path')
+  .datum(topojson.mesh(us, us.objects.states, (a, b) => a !== b))</code></pre>
+          </section>
+          <section>
+            <h4>Draw airports and their Voronoi cells</h4>
+            <pre><code class="javascript">var airport = svg.append('g')
+  .attr('class', 'airports')
+  .selectAll('g')
+  .data(airports.sort((a, b) => b.count - a.count))
+  .enter()
+  .append('g')
+    .attr('class', 'airport')
+
+airport
+  .append('path')
+  .attr('class', 'airport-cell')
+  .attr('d', (d) => d.cell.length ? 'M' + d.cell.join('L') + 'Z' : null)</code></pre>
+          </section>
+          <section>
+            <h4>Draw arcs for fligths, and circles for airports</h4>
+            <pre><code class="javascript">airport
+  .append('g')
+  .attr('class', 'airport-arcs')
+  .selectAll('path')
+  .data((d) => d.outgoing)
+  .enter()
+  .append('path')
+    .attr('d', (d) => path({type: 'LineString', coordinates: [d.source, d.target]})
+
+airport
+  .append('circle')
+  .attr('transform', (d) => `translate(${d.x}, ${d.y})`)
+  .attr('r', (d, i) => Math.sqrt(d.count))</code></pre>
+          </section>
+          <section>
+            <h2>Prettify with stylesheets</h2>
+            <h4>Arcs and cells are not shown by default</h4>
+            <pre><code class="scss">.airport-arcs {
+  display: none;
+  fill: none;
+  stroke: #000;
+}
+.airport-cell {
+  fill: none;
+  pointer-events: all;
+}
+.airports circle {
+  fill: steelblue;
+  stroke: #fff;
+  pointer-events: none;
+}</code></pre>
+          </section>
+          <section>
+            <h4>Arcs and cells toggle on hover events</h4>
+            <pre><code class="scss">.airport:hover .airport-arcs {
+  display: inline;
+}
+svg:not(:hover) .airport-cell {
+  stroke: #000;
+  stroke-opacity: .2;
+}
+
+.states {
+  fill: #ccc;
+}
+.state-borders {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}</code></pre>
+          </section>
+          <section>
+            <p><a href="http://bl.ocks.org/mbostock/7608400/">Result</a></p>
+          </section>
+        </section>
+        <!-- END VORONOI ARC MAP -->
+
+        <!-- BEGIN DONUT CHART DEMO -->
+        <section>
+          <section>
+            <h2>A simpler start:<br>A simple donut chart</h2>
+            <p><a href="http://codepen.io/emilyaviva/pen/aZoqBX">http://codepen.io/emilyaviva/pen/aZoqBX</a></p>
+          </section>
+          <section>
+            <h2>Prepare the data</h2>
+            <p>Acreage of Commercial Hop Production in North America, 2015</p>
+            <p><a href="http://www.usahops.org">usahops.org</a></p>
+            <pre><code class="javascript">var hopsData = [{
+  name: 'Washington',
+  acres: 32205
+}, {
+  name: 'Oregon',
+  acres: 6807
+}, {
+  name: 'Idaho',
+  acres: 4975
+}, {
+  name: 'Other States',
+  acres: 1244
+}, {
+  name: 'Canada',
+  acres: 257
+}]</code></pre>
+          </section>
+          <section>
+            <h3>Create an empty <code class="html" data-noescape>&lt;div&gt;</code> for the SVG</h3>
+            <pre><code class="html" data-trim>
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    &lt;title&gt;North American Hops&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div id="chart"&gt;&lt;/div&gt;
+    &lt;script src="//path/to/d3.js"&gt;&lt;/script&gt;
+    &lt;script src="client.js"&gt;&lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
+          </section>
+          <section>
+            <h3>Set up D3</h3>
+            <pre><code class="javascript" data-trim>
+var width = 400
+var height = 400
+var totalRadius = Math.min(width, height) / 2
+var donutHoleRadius = totalRadius * 0.5
+var color = d3.scale.category10()
+
+var svg = d3
+  .select('#chart')
+  .append('svg')
+  .attr('width', width)
+  .attr('height', height)
+  .append('g')
+    .attr('transform', `translate(${width / 2}, ${height / 2})`)</code></pre>
+          </section>
+          <section>
+            <h2>Telling D3 the basic shapes</h2>
+            <pre><code class="javascript" data-trim>
+var arc = d3.svg.arc()
+  .innerRadius(totalRadius - donutHoleRadius)
+  .outerRadius(totalRadius)
+
+var pie = d3.layout.pie()
+  .value((d) => d.acres)
+  .sort(null)</code></pre>
+            <h4>...and binding the data</h4>
+            <pre><code class="javascript" data-trim>
+var path = svg
+  .selectAll('path')
+  .data(pie(hopsData))
+  .enter()
+  .append('path')
+    .attr('d', arc)
+    .attr('fill', (d, i) => color(d.data.name))</code></pre>
+          </section>
+          <section>
+            <h2>Behold, a donut chart</h2>
+            <svg width="400" height="400">
+              <g transform="translate(200, 200)">
+                <path d="M1.2246467991473532e-14,-200A200,200 0 1,1 -193.07269551272444,52.18174247235133L-96.53634775636222,26.090871236175666A100,100 0 1,0 6.123233995736766e-15,-100Z" fill="#1f77b4"></path>
+                <path d="M-193.07269551272444,52.18174247235133A200,200 0 0,1 -155.98169971579838,-125.1787096665024L-77.99084985789919,-62.5893548332512A100,100 0 0,0 -96.53634775636222,26.090871236175666Z" fill="#ff7f0e"></path>
+                <path d="M-155.98169971579838,-125.1787096665024A200,200 0 0,1 -41.169710217294906,-195.71677230279465L-20.584855108647453,-97.85838615139733A100,100 0 0,0 -77.99084985789919,-62.5893548332512Z" fill="#2ca02c"></path>
+                <path d="M-41.169710217294906,-195.71677230279465A200,200 0 0,1 -7.098309416028734,-199.8739953156346L-3.549154708014367,-99.9369976578173A100,100 0 0,0 -20.584855108647453,-97.85838615139733Z" fill="#d62728"></path>
+                <path d="M-7.098309416028734,-199.8739953156346A200,200 0 0,1 -3.6739403974420595e-14,-200L-1.8369701987210297e-14,-100A100,100 0 0,0 -3.549154708014367,-99.9369976578173Z" fill="#9467bd"></path>
+              </g>
+            </svg>
+          </section>
+          <section>
+            <h2>Put a legend inside the chart</h2>
+            <pre><code class="javascript" data-trim>
+var legendItemSize = 18
+var legendSpacing = 4
+
+var legend = svg
+  .selectAll('.legend')
+  .data(color.domain())
+  .enter()
+  .append('g')
+    .attr('class', 'legend')
+    .attr('transform', (d, i) => {
+      var height = legendItemSize + legendSpacing;
+      var offset = height * color.domain().length / 2;
+      var x = legendItemSize * -2
+      var y = (i * height) - offset
+      return `translate(${x}, ${y})`
+    })</code></pre>
+          </section>
+          <section>
+            <h4>Now let's actually draw some boxes</h4>
+            <pre><code class="javascript" data-trim>
+legend
+  .append('rect')
+    .attr('width', legendItemSize)
+    .attr('height', legendItemSize)
+    .style('fill', color);
+
+legend
+  .append('text')
+    .attr('x', legendItemSize + legendSpacing)
+    .attr('y', legendItemSize - legendSpacing)
+    .text((d) => d);</code></pre>
+          <h4>...and, of course, make it pretty</h4>
+          <pre><code class="scss" data-trim>
+.legend {
+  font-size: 12px;
+  font-family: sans-serif;
+  rect {
+    stroke-width: 2;
+  }
+  text {
+    fill: lightcyan;
+  }
+}</code></pre>
+          </section>
+          <section style="font-size:12px;font-family:sans-serif;">
+            <svg width="400" height="400">
+              <g transform="translate(200, 200)">
+                <path d="M1.2246467991473532e-14,-200A200,200 0 1,1 -193.07269551272444,52.18174247235133L-96.53634775636222,26.090871236175666A100,100 0 1,0 6.123233995736766e-15,-100Z" fill="#1f77b4"></path>
+                <path d="M-193.07269551272444,52.18174247235133A200,200 0 0,1 -155.98169971579838,-125.1787096665024L-77.99084985789919,-62.5893548332512A100,100 0 0,0 -96.53634775636222,26.090871236175666Z" fill="#ff7f0e"></path>
+                <path d="M-155.98169971579838,-125.1787096665024A200,200 0 0,1 -41.169710217294906,-195.71677230279465L-20.584855108647453,-97.85838615139733A100,100 0 0,0 -77.99084985789919,-62.5893548332512Z" fill="#2ca02c"></path>
+                <path d="M-41.169710217294906,-195.71677230279465A200,200 0 0,1 -7.098309416028734,-199.8739953156346L-3.549154708014367,-99.9369976578173A100,100 0 0,0 -20.584855108647453,-97.85838615139733Z" fill="#d62728"></path>
+                <path d="M-7.098309416028734,-199.8739953156346A200,200 0 0,1 -3.6739403974420595e-14,-200L-1.8369701987210297e-14,-100A100,100 0 0,0 -3.549154708014367,-99.9369976578173Z" fill="#9467bd"></path>
+                <g class="legend" transform="translate(-36, -55)">
+                  <rect width="18" height="18" style="fill: rgb(31, 119, 180);"></rect>
+                  <text fill="lightcyan" x="22" y="14">Washington</text>
+                </g>
+                <g class="legend" transform="translate(-36, -33)">
+                  <rect width="18" height="18" style="fill: rgb(255, 127, 14);"></rect>
+                  <text fill="lightcyan" x="22" y="14">Oregon</text>
+                </g>
+                <g class="legend" transform="translate(-36, -11)">
+                  <rect width="18" height="18" style="fill: rgb(44, 160, 44);"></rect>
+                  <text fill="lightcyan" x="22" y="14">Idaho</text>
+                </g>
+                <g class="legend" transform="translate(-36, 11)">
+                  <rect width="18" height="18" style="fill: rgb(214, 39, 40);"></rect>
+                  <text fill="lightcyan" x="22" y="14">Other States</text>
+                </g>
+                <g class="legend" transform="translate(-36, 33)">
+                  <rect width="18" height="18" style="fill: rgb(148, 103, 189);"></rect>
+                  <text fill="lightcyan" x="22" y="14">Canada</text>
+                </g>
+              </g>
+            </svg>
+          </section>
+        </section>
+      </section>
+      <!-- END DONUT CHART DEMO -->
+
+      <!-- D3 WITH POPULAR FRAMEWORKS -->
+      <section>
+        <h2>D3 with Popular Frameworks</h2>
+      </section>
+
+      <!-- BEGIN D3 + REACT -->
+      <section>
+        <section>
+          <h2>D3 + React</h2>
+          <p>React likes to have control over the entire DOM…</p>
+          <p>…but D3 likes to have control over the SVG DOM</p>
+        </section>
+        <section>
+          <h4>Solution 1: Wrap D3 components</h4>
+          <pre><code class="javascript" data-trim>
+import React from 'react'
+
+export default class D3Component extends React.Component {
+  constructor(props) {
+    super(props)
+  }
+
+  initialize() {}
+  update(prevProps, prevState) {}
+  destroy() {}
+
+  componentDidMount() {
+    this.initialize()
+    this.update()
+  }
+
+  componentDidUpdate(prevProps, prevState) {
+    this.update(prevProps, prevState)
+  }
+
+  componentWillUnmount() {
+    this.destroy()
+  }
+
+  render() {
+    return (
+      <svg ref="svg"></svg>
+    )
+  }
+}</code></pre>
+        </section>
+        <section>
+          <h4>Solution 2: Use a pre-built wrapping solution</h4>
+          <p>...e.g. <a href="https://www.npmjs.com/package/react-d3-wrap">react-d3-wrap</a></p>
+          <pre><code class="javascript" data-trim>
+import d3 from 'd3'
+import d3Wrap from 'react-d3-wrap'
+
+const MyChart = d3Wrap({
+  initialize(svg, data, options) {},
+  update(svg, data, options) {
+    const chart = d3
+      .select(svg)
+      .append('g')
+      .attr('transform', `translate(${options.margin.left}, ${options.margin.top})`)
+    // etc., etc.
+  },
+  destroy() {}
+})
+
+export default MyChart</code></pre>
+        </section>
+        <section>
+          <h4>Solution 3: <a href="http://formidable.com/open-source/victory/">Victory</a> from Formidable</h4>
+          <p style="font-size: 50%;"><a href="http://formidable.com/open-source/victory/docs/victory-scatter">http://formidable.com/open-source/victory/docs/victory-scatter</a></p>
+          <pre><code language="javascript" data-trim>
+class CatPoint extends React.Component {
+  render() {
+    const {x, y, datum} = this.props
+    const cat = datum.y >= 0 ? '😻' : '😹'
+    return &lt;text x={x} y={y} fontSize={30}>{cat}&lt;/text&gt;
+  }
+}
+
+class App extends React.Component {
+  render() {
+    return (
+      &lt;VictoryScatter
+        height={500}
+        y={(d) => Math.sin(2 * Math.PI * d.x)}
+        samples={25}
+        dataComponent={&lt;CatPoint /&gt;}
+      /&gt;
+    )
+  }
+}</code></pre>
+        </section>
+        <section>
+          <svg width="500" height="500">
+            <g>
+              <text x="50" y="250" font-size="30">😻</text>
+              <text x="64" y="200.16368197743552" font-size="30">😻</text>
+              <text x="78" y="153.4587631013854" font-size="30">😻</text>
+              <text x="92" y="112.81988519350818" font-size="30">😻</text>
+              <text x="106" y="80.80053841209383" font-size="30">😻</text>
+              <text x="120" y="59.4126160743387" font-size="30">😻</text>
+              <text x="134" y="50" font-size="30">😻</text>
+              <text x="148" y="53.15411947420887" font-size="30">😻</text>
+              <text x="162" y="68.67678957036077" font-size="30">😻</text>
+              <text x="176" y="95.5926638379272" font-size="30">😻</text>
+              <text x="190" y="132.21051890701597" font-size="30">😻</text>
+              <text x="204" y="176.2295202725855" font-size="30">😻</text>
+              <text x="218" y="224.8837921882746" font-size="30">😻</text>
+              <text x="232" y="275.1162078117253" font-size="30">😹</text>
+              <text x="246.00000000000003" y="323.77047972741457" font-size="30">😹</text>
+              <text x="260" y="367.78948109298403" font-size="30">😹</text>
+              <text x="274" y="404.4073361620728" font-size="30">😹</text>
+              <text x="288" y="431.3232104296393" font-size="30">😹</text>
+              <text x="302" y="446.84588052579113" font-size="30">😹</text>
+              <text x="316" y="450" font-size="30">😹</text>
+              <text x="330" y="440.58738392566136" font-size="30">😹</text>
+              <text x="344" y="419.1994615879063" font-size="30">😹</text>
+              <text x="358" y="387.1801148064919" font-size="30">😹</text>
+              <text x="372" y="346.5412368986146" font-size="30">😹</text>
+              <text x="386" y="299.83631802256457" font-size="30">😹</text>
+              <text x="400" y="250.00000000000006" font-size="30">😹</text>
+            </g>
+          </svg>
+        </section>
+      </section>
+      <!-- END D3 + REACT -->
+
+      <!-- BEGIN D3 + ANGULAR -->
+      <section>
+        <section>
+          <h2>D3 + Angular</h2>
+          <h6>Wrap D3 in an Angular directive</h6>
+          <p><a href="http://codepen.io/emilyaviva/pen/bebQzZ/">http://codepen.io/emilyaviva/pen/bebQzZ/</a></p>
+          <p style="font-size: 50%;">Inspired by Mike Bostock's <a href="https://bl.ocks.org/mbostock/3884955">Multi-Series Line Chart</a></p>
+        </section>
+        <section>
+          <h3>Controller gets data</h3>
+          <p>Fremont Bridge Hourly Bicycle Counts, 1 May 2015</p>
+          <p style="font-size: 50%;"><a href="https://dev.socrata.com/foundry/data.seattle.gov/4xy5-26gy">https://dev.socrata.com/foundry/data.seattle.gov/4xy5-26gy</a></p>
+          <pre><code class="javascript" data-trim>
+app.controller('BikeCrossingController', ['$scope', ($scope) => {
+  $scope.bikeCrossingData = [{
+    date: '2015-05-01T00:00:00.000',
+    fremont_bridge_nb: '5',
+    fremont_bridge_sb: '14'
+  }, {
+    date: '2015-05-01T01:00:00.000',
+    fremont_bridge_nb: '1',
+    fremont_bridge_sb: '3'
+  }, {
+    date: '2015-05-01T02:00:00.000',
+    fremont_bridge_nb: '1',
+    fremont_bridge_sb: '6'
+  }, {
+    date: '2015-05-01T03:00:00.000',
+    fremont_bridge_nb: '3',
+    fremont_bridge_sb: '2'
+  }, {
+    date: '2015-05-01T04:00:00.000',
+    fremont_bridge_nb: '8',
+    fremont_bridge_sb: '0'
+  }, {
+    date: '2015-05-01T05:00:00.000',
+    fremont_bridge_nb: '29',
+    fremont_bridge_sb: '15'
+  }, {
+    date: '2015-05-01T06:00:00.000',
+    fremont_bridge_nb: '110',
+    fremont_bridge_sb: '54'
+  }, {
+    date: '2015-05-01T07:00:00.000',
+    fremont_bridge_nb: '390',
+    fremont_bridge_sb: '94'
+  }, {
+    date: '2015-05-01T08:00:00.000',
+    fremont_bridge_nb: '399',
+    fremont_bridge_sb: '164'
+  }, {
+    date: '2015-05-01T09:00:00.000',
+    fremont_bridge_nb: '151',
+    fremont_bridge_sb: '100'
+  }, {
+    date: '2015-05-01T10:00:00.000',
+    fremont_bridge_nb: '67',
+    fremont_bridge_sb: '46'
+  }, {
+    date: '2015-05-01T11:00:00.000',
+    fremont_bridge_nb: '49',
+    fremont_bridge_sb: '47'
+  }, {
+    date: '2015-05-01T12:00:00.000',
+    fremont_bridge_nb: '57',
+    fremont_bridge_sb: '47'
+  }, {
+    date: '2015-05-01T13:00:00.000',
+    fremont_bridge_nb: '57',
+    fremont_bridge_sb: '66'
+  }, {
+    date: '2015-05-01T14:00:00.000',
+    fremont_bridge_nb: '73',
+    fremont_bridge_sb: '85'
+  }, {
+    date: '2015-05-01T15:00:00.000',
+    fremont_bridge_nb: '89',
+    fremont_bridge_sb: '183'
+  }, {
+    date: '2015-05-01T16:00:00.000',
+    fremont_bridge_nb: '149',
+    fremont_bridge_sb: '326'
+  }, {
+    date: '2015-05-01T17:00:00.000',
+    fremont_bridge_nb: '211',
+    fremont_bridge_sb: '418'
+  }, {
+    date: '2015-05-01T18:00:00.000',
+    fremont_bridge_nb: '126',
+    fremont_bridge_sb: '206'
+  }, {
+    date: '2015-05-01T19:00:00.000',
+    fremont_bridge_nb: '80',
+    fremont_bridge_sb: '95'
+  }, {
+    date: '2015-05-01T20:00:00.000',
+    fremont_bridge_nb: '42',
+    fremont_bridge_sb: '43'
+  }, {
+    date: '2015-05-01T21:00:00.000',
+    fremont_bridge_nb: '18',
+    fremont_bridge_sb: '30'
+  }, {
+    date: '2015-05-01T22:00:00.000',
+    fremont_bridge_nb: '19',
+    fremont_bridge_sb: '13'
+  }, {
+    date: '2015-05-01T23:00:00.000',
+    fremont_bridge_nb: '11',
+    fremont_bridge_sb: '22'
+  }]
+}])</code></pre>
+        </section>
+        <section>
+          <h3>Sort out our data, scales, and axes</h3>
+<pre><code class="javascript" data-trim>
+app.directive('lineChart', ($parse, $window) => {
+  return {
+    restrict: 'EA',
+    template: '<svg></svg>',
+    link: function(scope, el, attrs) {
+      var d3 = $window.d3
+      var margin = {top: 20, right: 80, bottom: 30, left: 50}
+      var width = 960 - margin.left - margin.right
+      var height = 500 - margin.top - margin.bottom
+
+      var data = scope.bikeCrossingData.map((d) => {
+        return {
+          hour: (new Date(d.date).getHours() + 8) % 24,
+          northbound: d.fremont_bridge_nb,
+          southbound: d.fremont_bridge_sb
+        }
+      }).sort((a, b) => d3.ascending(a.hour, b.hour))
+
+      var svg = d3.select(el.find('svg')[0])
+
+      var color = d3.scale.category10()
+      color.domain(d3.keys(data[0])
+        .filter((key) => key !== 'hour'))
+
+      var curves = color.domain().map((name) => {
+        return {
+          name,
+          values: data.map((d) => {
+            return {
+              hour: d.hour,
+              bikers: +d[name]
+            }
+          })
+        }
+      })
+
+      // set scales
+      var x = d3.scale.linear().range([0, width])
+      var y = d3.scale.linear().range([height, 0])
+
+      x.domain(d3.extent(data, (d) => d.hour))
+      y.domain([
+        d3.min(curves, (c) => d3.min(c.values, (v) => v.bikers)),
+        d3.max(curves, (c) => d3.max(c.values, (v) => v.bikers))
+      ])
+
+      // set axes
+      var hourLabels = ['12am', '2am', '4am', '6am', '8am', '10am', '12pm', '2pm', '4pm', '6pm', '8pm', '10pm']
+
+      var xAxis = d3.svg.axis()
+        .scale(x)
+        .orient('bottom')
+        .ticks(12)
+        .tickFormat((d, i) => hourLabels[i])
+
+      var yAxis = d3.svg.axis()
+        .scale(y)
+        .orient('left')
+        .ticks(8)
+
+      // draw the lines in between the data points
+      var line = d3.svg.line()
+        .interpolate('basis')
+        .x((d) => x(d.hour))
+        .y((d) => y(d.bikers))
+
+      svg = svg
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left}, ${margin.top})`)
+
+      svg.append('g')
+        .attr('class', 'x axis')
+        .attr('transform', `translate(0, ${height})`)
+        .call(xAxis)
+
+      svg.append('g')
+        .attr('class', 'y axis')
+        .call(yAxis)
+
+      // bind the curves to our data
+      var curve = svg
+        .selectAll('.curve')
+        .data(curves)
+        .enter()
+        .append('g')
+        .attr('class', 'curve')
+
+      curve.append('path')
+        .attr('class', 'line')
+        .attr('d', (d) => line(d.values))
+        .style('stroke', (d) => color(d.name))
+
+      // show the label after the curve
+      curve.append('text')
+        .datum((d) => {
+          return {
+            name: d.name,
+            value: d.values[d.values.length - 1]
+          }
+        })
+        .attr('transform', (d) => `translate(${x(d.value.hour)}, ${y(d.value.bikers)})`)
+        .attr('x', 3)
+        .attr('dy', '.35em')
+        .style('fill', (d) => color(d.name))
+        .text((d) => d.name)
+
+      // don't show ticks at the origin
+      svg.selectAll('.tick')
+        .filter((d) => d === 0)
+        .remove()
+    }
+  }
+})</code></pre>
+</section>
+<section>
+  <pre><code class="sass" data-trim>
+body {
+  background: black;
+  color: white;
+  font-family: sans-serif;
+  font-size: 12px;
+}
+.axis {
+  path, line {
+    fill: none;
+    stroke: white;
+    shape-rendering: crispEdges;
+  }
+}
+.line {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: 1.5px;
+}
+text {
+  fill: white;
+}</code></pre>
+  <pre><code class="html" data-trim>
+&lt;div ng-app="visualizationApp" ng-controller="BikeCrossingController"&gt;
+  &lt;div line-chart chart-data="bikeCrossingData"&gt;&lt;/div&gt;
+&lt;/div&gt;</code></pre>
+  <pre><code class="javascript">
+var app = angular.module('visualizationApp', [])</code></pre>
+          </section>
+          <section>
+            <p><a href="http://codepen.io/emilyaviva/pen/bebQzZ/">See the result on CodePen</a></p>
+          </section>
+        </section>
+      </section>
+      <!-- END D3 + ANGULAR -->
+
+      <!-- END SLIDES -->
+      <section>
+        <h2>Where next?</h2>
+        <ul>
+          <li><a href="https://github.com/d3/d3/wiki">The D3 Wiki on GitHub</a>
+          <ul>
+            <li><a href="https://github.com/d3/d3/wiki/Tutorials">Lots and lots of tutorials and talks</a></li>
+            <li><a href="https://github.com/d3/d3/wiki/API-Reference">The D3 API documentation</a></li>
+          </ul></li>
+          <br>
+          <li><a href="https://www.nostarch.com/datavisualization"><em>Data Visualization with JavaScript</em> by Stephen A. Thomas</a>
+          <ul>
+            <li><a href="https://www.nostarch.com/download/Data_Viz_sample_ch7.pdf">Chapter 7: Custom Visualizations with D3.js — Free PDF!</a></li>
+          </ul></li>
+          <br>
+          <li><a href="http://chimera.labs.oreilly.com/books/1230000000345/"><em>Interactive Data Visualization for the Web</em> by Scott Murray</a></li>
+          <br>
+          <li><a href="https://leanpub.com/d3angularjs"><em>D3 on AngularJS</em> by Ari Lerner and Victor Powell</a></li>
+        </ul>
+      </section>
+      <section>
+        <p><a href="http://emilyaviva.com/">Emily Aviva Kapor-Mater</a></p>
+        <p>
+          <i class="fa fa-twitter-square" aria-hidden="true"></i>
+          <a href="https://twitter.com/EmilyAviva">@EmilyAviva</a>
+        </p>
+        <p>
+          <i class="fa fa-github" aria-hidden="true"></i>
+          <a href="https://github.com/EmilyAviva">EmilyAviva</a>
+        </p>
+        <p>
+          <i class="fa fa-linkedin-square" aria-hidden="true"></i>
+          <a href="https://linkedin.com/in/emilykapor">emilykapor</a>
+        </p>
+      </section>
+
+      </div>
+    </div>
+
+    <script src="lib/js/head.min.js"></script>
+    <script src="js/reveal.js"></script>
+
+    <script>
+      // More info https://github.com/hakimel/reveal.js#configuration
+      Reveal.initialize({
+        history: true,
+
+        // More info https://github.com/hakimel/reveal.js#dependencies
+        dependencies: [
+          { src: 'plugin/markdown/marked.js' },
+          { src: 'plugin/markdown/markdown.js' },
+          { src: 'plugin/notes/notes.js', async: true },
+          { src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
+        ]
+      });
+    </script>
+  </body>
+</html>

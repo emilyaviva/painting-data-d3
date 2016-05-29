@@ -83,21 +83,21 @@
           </section>
           <section>
             <h2>Include some extra libraries</h2>
-            <pre><code class="html">
-  &lt;!DOCTYPE html&gt;
-  &lt;html lang="en"&gt;
-    &lt;head&gt;
-      &lt;meta charset="utf-8"&gt;
-      &lt;title&gt;Voronoi Arc Map&lt;/title&gt;
-    &lt;/head&gt;
-    &lt;body&gt;
-      &lt;div id="chart"&gt;&lt;/div&gt;
-      &lt;script src="//path/to/d3.js"&gt;&lt;/script&gt;
-      &lt;script src="//path/to/d3/queue.js"&gt;&lt;/script&gt;
-      &lt;script src="//path/to/mbostock/topojson.js"&gt;&lt;/script&gt;
-      &lt;script src="client.js"&gt;&lt;/script&gt;
-    &lt;/body&gt;
-  &lt;/html&gt;</code></pre>
+            <pre><code class="html" data-trim>
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    &lt;title&gt;Voronoi Arc Map&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div id="chart"&gt;&lt;/div&gt;
+    &lt;script src="//path/to/d3.js"&gt;&lt;/script&gt;
+    &lt;script src="//path/to/d3/queue.js"&gt;&lt;/script&gt;
+    &lt;script src="//path/to/mbostock/topojson.js"&gt;&lt;/script&gt;
+    &lt;script src="client.js"&gt;&lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
           </section>
           <section>
             <h2>Set up D3</h2>
@@ -120,8 +120,7 @@ var svg = d3
   .select('#chart')
   .append('svg')
     .attr('width', width)
-    .attr('height', height)
-  </code></pre>
+    .attr('height', height)</code></pre>
           </section>
           <section>
             <h2>Asynchronously load data until ready</h2>
@@ -813,7 +812,7 @@ text {
 &lt;div ng-app="visualizationApp" ng-controller="BikeCrossingController"&gt;
   &lt;div line-chart chart-data="bikeCrossingData"&gt;&lt;/div&gt;
 &lt;/div&gt;</code></pre>
-  <pre><code class="javascript">
+  <pre><code class="javascript" data-trim>
 var app = angular.module('visualizationApp', [])</code></pre>
           </section>
           <section>
